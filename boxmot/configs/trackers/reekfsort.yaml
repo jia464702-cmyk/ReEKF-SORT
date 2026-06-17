@@ -1,0 +1,104 @@
+min_conf:
+  type: uniform
+  default: 0.1
+  range: [0.1, 0.3]
+
+det_thresh:
+  type: uniform
+  default: 0.6
+  range: [0, 0.8]
+
+max_age:
+  type: grid_search
+  default: 30
+  values: [10, 20, 30, 40, 50, 60]
+
+min_hits:
+  type: grid_search
+  default: 3
+  values: [1, 2, 3, 4, 5]
+
+iou_threshold:
+  type: uniform
+  default: 0.3
+  range: [0.1, 0.5]
+
+asso_func:
+  type: choice
+  default: iou
+  options: ['iou', 'giou', 'diou', 'ciou', 'hmiou']
+
+lambda_conf:
+  type: uniform
+  default: 1.2
+  range: [0.0, 2.0]
+
+lambda_angle:
+  type: uniform
+  default: 0.0
+  range: [0.0, 1.0]
+
+confidence_eps:
+  type: loguniform
+  default: 0.000001
+  range: [0.000001, 0.001]
+
+angle_smoothing:
+  type: uniform
+  default: 0.8
+  range: [0.0, 0.99]
+
+angular_velocity_smoothing:
+  type: uniform
+  default: 0.8
+  range: [0.0, 0.99]
+
+confidence_decay:
+  type: uniform
+  default: 0.95
+  range: [0.8, 0.999]
+
+virtual_update_interval:
+  type: grid_search
+  default: 2
+  values: [1, 2, 4, 6]
+
+virtual_obs_noise_scale:
+  type: loguniform
+  default: 10.0
+  range: [1.0, 100.0]
+
+use_virtual_observation:
+  type: choice
+  default: true
+  options: [true, false]
+
+use_confidence_cost:
+  type: choice
+  default: true
+  options: [true, false]
+
+use_angle_cost:
+  type: choice
+  default: false
+  options: [true, false]
+
+Q_xy_scaling:
+  type: loguniform
+  default: 0.01
+  range: [0.01, 1]
+
+Q_s_scaling:
+  type: loguniform
+  default: 0.0001
+  range: [0.0001, 1]
+
+Q_angle_scaling:
+  type: loguniform
+  default: 0.001
+  range: [0.0001, 0.1]
+
+Q_conf_scaling:
+  type: loguniform
+  default: 0.001
+  range: [0.0001, 0.1]

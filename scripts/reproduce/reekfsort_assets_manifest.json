@@ -1,0 +1,68 @@
+{
+  "generated_at": "2026-06-14 15:03:29 UTC",
+  "datasets": [
+    {
+      "benchmark": "dancetrack",
+      "split": "val",
+      "root": "boxmot/engine/eval/trackeval/data/test1",
+      "source": "https://huggingface.co/datasets/noahcao/dancetrack/resolve/main/test1.zip",
+      "local_path": "boxmot/engine/eval/trackeval/data/test1"
+    },
+    {
+      "benchmark": "mot17",
+      "split": "ablation",
+      "root": "boxmot/engine/eval/trackeval/data/MOT17",
+      "source": "hf://Lekim89/mot17-parquet/images/train",
+      "local_path": "boxmot/engine/eval/trackeval/data/MOT17"
+    },
+    {
+      "benchmark": "mot20",
+      "split": "ablation",
+      "root": "boxmot/engine/eval/trackeval/data/MOT20",
+      "source": "hf://Lekim89/MOT20/ablation",
+      "local_path": "boxmot/engine/eval/trackeval/data/MOT20"
+    }
+  ],
+  "detectors": [
+    {
+      "benchmark": "dancetrack",
+      "split": "val",
+      "detector_id": "yolox_x_dancetrack",
+      "model": "models/yolox_x_dancetrack.pt",
+      "url": "https://huggingface.co/Lekim89/yolox/resolve/main/yolox_x_dancetrack.pt",
+      "imgsz": [
+        800,
+        1440
+      ],
+      "conf": 0.01,
+      "local_path": "models/yolox_x_dancetrack.pt"
+    },
+    {
+      "benchmark": "mot17",
+      "split": "ablation",
+      "detector_id": "yolox_x_mot17_ablation",
+      "model": "models/yolox_x_MOT17_ablation.pt",
+      "url": "https://huggingface.co/Lekim89/yolox/resolve/main/yolox_x_MOT17_ablation.pt",
+      "imgsz": [
+        800,
+        1440
+      ],
+      "conf": 0.01,
+      "local_path": "models/yolox_x_MOT17_ablation.pt"
+    },
+    {
+      "benchmark": "mot20",
+      "split": "ablation",
+      "detector_id": "yolox_x_mot20_ablation",
+      "model": "models/yolox_x_MOT20_ablation.pt",
+      "url": "https://huggingface.co/Lekim89/yolox/resolve/main/yolox_x_MOT20_ablation.pt",
+      "imgsz": [
+        800,
+        1440
+      ],
+      "conf": 0.01,
+      "local_path": "models/yolox_x_MOT20_ablation.pt"
+    }
+  ],
+  "reid": "not required for ReEKF-SORT"
+}

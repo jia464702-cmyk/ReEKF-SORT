@@ -1,0 +1,42 @@
+cff-version: 1.2.0
+
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+
+authors:
+  - given-names: Jianhong
+    family-names: Ma
+  - given-names: Jia
+    family-names: Liu
+  - given-names: Yan
+    family-names: Jin
+  - given-names: Yongxia
+    family-names: Chen
+
+abstract: >-
+  ReEKF-SORT is a motion-only online multi-object tracker for non-linear pedestrian
+  motion and occlusion. It keeps the SORT-style tracking-by-detection workflow,
+  replaces the linear motion state with a speed-angle extended Kalman filter, and
+  adds causal virtual observations plus confidence-continuity association.
+
+title: "Online multi-object occlusion tracking based on causal motion prediction and confidence-continuity association"
+license: AGPL-3.0
+version: 21.0.0
+date-released: "2026-06-17"
+type: software
+preferred-citation:
+  type: article
+  title: "Online multi-object occlusion tracking based on causal motion prediction and confidence-continuity association"
+  authors:
+    - given-names: Jianhong
+      family-names: Ma
+    - given-names: Jia
+      family-names: Liu
+    - given-names: Yan
+      family-names: Jin
+    - given-names: Yongxia
+      family-names: Chen
+  journal: "The Visual Computer"
+  status: "manuscript submitted"
+  year: 2026
