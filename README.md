@@ -1,237 +1,162 @@
-<div align="center" markdown="1">
+# ReEKF-SORT Open Source Release
 
-  <img width="400"
-       src="docs/logo/logo.png"
-       alt="BoxMOT logo">
+Paper title for The Visual Computer resubmission:
 
-  <p><b>Pluggable Python and C++ multi-object tracking modules for axis-aligned and oriented bounding box detections from any model.</b></p>
+> Online multi-object occlusion tracking based on causal motion prediction and confidence-continuity association
 
-  ---
+ReEKF-SORT is a motion-only online multi-object tracker for non-linear pedestrian motion and occlusion. It keeps the SORT-style tracking-by-detection workflow, replaces the linear motion state with a speed-angle extended Kalman filter, and adds causal virtual observations plus confidence-continuity association.
 
-  [Docs](docs/index.md) • [Installation](docs/getting-started/installation.md) • [Modes](docs/modes/index.md) • [API Reference](docs/python/index.md) • [Trackers](docs/trackers/index.md) • [Contributing](CONTRIBUTING.md)
+This repository package contains source code, configs, documentation, and reproduction scripts only. Datasets, detector weights, run outputs, caches, and exported model files are intentionally not bundled.
 
-</div>
+## Paper Final Configuration
 
-BoxMOT gives you one CLI and one Python API for running modern multi-object tracking workflows. It covers direct tracking, cached benchmark evaluation, tuning, research loops, ReID training and evaluation, and ReID export without forcing you to rebuild the detector and tracker stack for each experiment.
+The paper final `Ours` configuration is the no-angle setting in `boxmot/configs/trackers/reekfsort.yaml`:
 
-## Why BoxMOT
+```yaml
+use_virtual_observation:
+  default: true
+use_confidence_cost:
+  default: true
+use_angle_cost:
+  default: false
+lambda_angle:
+  default: 0.0
+```
 
-- One interface for `track`, `generate`, `eval`, `tune`, `research`, `train`, `eval-reid`, and `export`.
-- Swappable trackers with shared detector and ReID plumbing.
-- Benchmark-oriented workflows with reusable detections and embeddings.
-- Support for both AABB and OBB tracking paths.
-- Optional production-ready native C++ tracker implementations with the same metrics as the Python path, opted into via `--tracker-backend cpp` and embeddable in standalone C++ projects via CMake (see [Native C++ Integration](docs/guides/native-cpp.md)).
-- Public Python API for embedding the same workflows in applications and notebooks.
+`boxmot/configs/trackers/reekfsort_with_angle.yaml` preserves the with-angle/full candidate for ablation only. It is not the paper final `Ours` setting.
 
-## Installation
+## Citation And License Status
 
-BoxMOT supports Python `3.10` through `3.13`.
+`CITATION.cff` records software citation metadata for this release and uses the
+The Visual Computer resubmission title above. Before a paper-final public
+release, manually confirm the author order, affiliations, publication year,
+DOI or arXiv URL, and final project GitHub URL. If the paper is not formally
+published yet, keep the citation as submitted software/preprint metadata
+instead of inventing a DOI or final publication record.
+
+Preserve upstream project references when preparing the final manuscript or
+artifact page: BoxMOT, TrackEval, YOLOX, DanceTrack, and MOTChallenge. This
+release follows the upstream BoxMOT AGPL-3.0 license. Third-party components
+retain their original licenses, including TrackEval under MIT and YOLOX under
+Apache-2.0.
+
+## Environment
+
+Use Python 3.10 or newer. A minimal source checkout workflow is:
 
 ```bash
-pip install boxmot
-boxmot --help
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e .
+python -m pip install -r requirements/reekfsort_eval.txt
+python -m pip install yolox==0.3.0 --no-deps
 ```
 
-For mode-specific extras such as `yolo`, `evolve`, `research`, `onnx`, `openvino`, and `tflite`, see the [installation guide](docs/getting-started/installation.md).
+The `yolox==0.3.0 --no-deps` step avoids pulling outdated YOLOX dependency pins over the evaluation environment. Install the CUDA-enabled PyTorch build that matches your machine before running GPU evaluation.
 
-## Benchmark Results
+## Dataset Preparation
 
-<div align="center" markdown="1">
-
-<!-- START TRACKER TABLE -->
-<table>
-  <thead>
-    <tr>
-      <th rowspan="2" align="left"><sub>Tracker</sub></th>
-      <th rowspan="2" align="center"><sub>Status</sub></th>
-      <th colspan="3" align="center"><sub>MOT17 ablation</sub></th>
-      <th colspan="3" align="center"><sub>SportsMOT val</sub></th>
-      <th colspan="3" align="center"><sub>MMOT test</sub></th>
-      <th rowspan="2" align="center"><sub>OBB</sub></th>
-    </tr>
-    <tr>
-      <th align="right"><sub>HOTA</sub></th>
-      <th align="right"><sub>MOTA</sub></th>
-      <th align="right"><sub>IDF1</sub></th>
-      <th align="right"><sub>HOTA</sub></th>
-      <th align="right"><sub>MOTA</sub></th>
-      <th align="right"><sub>IDF1</sub></th>
-      <th align="right"><sub>HOTA</sub></th>
-      <th align="right"><sub>MOTA</sub></th>
-      <th align="right"><sub>IDF1</sub></th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td align="left"><sub>occluboost</sub></td>
-      <td align="center"><sub>✅</sub></td>
-      <td align="right"><sub><b>70.47</b><br>(70.48)</sub></td>
-      <td align="right"><sub><b>78.32</b><br>(78.31)</sub></td>
-      <td align="right"><sub><b>84.14</b><br>(84.14)</sub></td>
-      <td align="right"><sub><b>83.17</b></sub></td>
-      <td align="right"><sub>97.48</sub></td>
-      <td align="right"><sub><b>89.36</b></sub></td>
-      <td align="right"><sub>–</sub></td>
-      <td align="right"><sub>–</sub></td>
-      <td align="right"><sub>–</sub></td>
-      <td align="center"><sub>✅</sub></td>
-    </tr>
-    <tr>
-      <td align="left"><sub><a href="https://arxiv.org/abs/2206.14651">botsort</a></sub></td>
-      <td align="center"><sub>✅</sub></td>
-      <td align="right"><sub>69.44<br>(69.43)</sub></td>
-      <td align="right"><sub>78.24<br>(78.26)</sub></td>
-      <td align="right"><sub>81.94<br>(82.00)</sub></td>
-      <td align="right"><sub>76.93</sub></td>
-      <td align="right"><sub><b>98.11</b></sub></td>
-      <td align="right"><sub>78.30</sub></td>
-      <td align="right"><sub><b>51.79</b></sub></td>
-      <td align="right"><sub><b>46.05</b></sub></td>
-      <td align="right"><sub><b>60.85</b></sub></td>
-      <td align="center"><sub>✅</sub></td>
-    </tr>
-    <tr>
-      <td align="left"><sub><a href="https://arxiv.org/abs/2408.13003">boosttrack</a></sub></td>
-      <td align="center"><sub>✅</sub></td>
-      <td align="right"><sub>69.25<br>(—)</sub></td>
-      <td align="right"><sub>75.91<br>(—)</sub></td>
-      <td align="right"><sub>83.20<br>(—)</sub></td>
-      <td align="right"><sub>76.32</sub></td>
-      <td align="right"><sub>97.08</sub></td>
-      <td align="right"><sub>77.82</sub></td>
-      <td align="right"><sub>–</sub></td>
-      <td align="right"><sub>–</sub></td>
-      <td align="right"><sub>–</sub></td>
-      <td align="center"><sub>❌</sub></td>
-    </tr>
-    <tr>
-      <td align="left"><sub><a href="https://arxiv.org/abs/2202.13514">strongsort</a></sub></td>
-      <td align="center"><sub>✅</sub></td>
-      <td align="right"><sub>68.05<br>(—)</sub></td>
-      <td align="right"><sub>76.19<br>(—)</sub></td>
-      <td align="right"><sub>80.76<br>(—)</sub></td>
-      <td align="right"><sub>79.80</sub></td>
-      <td align="right"><sub>97.31</sub></td>
-      <td align="right"><sub>80.27</sub></td>
-      <td align="right"><sub>–</sub></td>
-      <td align="right"><sub>–</sub></td>
-      <td align="right"><sub>–</sub></td>
-      <td align="center"><sub>❌</sub></td>
-    </tr>
-    <tr>
-      <td align="left"><sub><a href="https://arxiv.org/abs/2302.11813">deepocsort</a></sub></td>
-      <td align="center"><sub>✅</sub></td>
-      <td align="right"><sub>67.95<br>(—)</sub></td>
-      <td align="right"><sub>75.83<br>(—)</sub></td>
-      <td align="right"><sub>80.54<br>(—)</sub></td>
-      <td align="right"><sub>79.51</sub></td>
-      <td align="right"><sub>97.94</sub></td>
-      <td align="right"><sub>79.59</sub></td>
-      <td align="right"><sub>–</sub></td>
-      <td align="right"><sub>–</sub></td>
-      <td align="right"><sub>–</sub></td>
-      <td align="center"><sub>❌</sub></td>
-    </tr>
-    <tr>
-      <td align="left"><sub><a href="https://arxiv.org/abs/2110.06864">bytetrack</a></sub></td>
-      <td align="center"><sub>✅</sub></td>
-      <td align="right"><sub>67.68<br>(67.75)</sub></td>
-      <td align="right"><sub>78.04<br>(78.03)</sub></td>
-      <td align="right"><sub>79.16<br>(79.38)</sub></td>
-      <td align="right"><sub>67.93</sub></td>
-      <td align="right"><sub>97.25</sub></td>
-      <td align="right"><sub>76.90</sub></td>
-      <td align="right"><sub>33.97</sub></td>
-      <td align="right"><sub>33.72</sub></td>
-      <td align="right"><sub>39.74</sub></td>
-      <td align="center"><sub>✅</sub></td>
-    </tr>
-    <tr>
-      <td align="left"><sub><a href="https://arxiv.org/abs/2308.00783">hybridsort</a></sub></td>
-      <td align="center"><sub>✅</sub></td>
-      <td align="right"><sub>67.31<br>(—)</sub></td>
-      <td align="right"><sub>74.09<br>(—)</sub></td>
-      <td align="right"><sub>78.87<br>(—)</sub></td>
-      <td align="right"><sub>81.14</sub></td>
-      <td align="right"><sub>98.07</sub></td>
-      <td align="right"><sub>81.88</sub></td>
-      <td align="right"><sub>–</sub></td>
-      <td align="right"><sub>–</sub></td>
-      <td align="right"><sub>–</sub></td>
-      <td align="center"><sub>❌</sub></td>
-    </tr>
-    <tr>
-      <td align="left"><sub><a href="https://arxiv.org/abs/2203.14360">ocsort</a></sub></td>
-      <td align="center"><sub>✅</sub></td>
-      <td align="right"><sub>66.44<br>(66.44)</sub></td>
-      <td align="right"><sub>74.55<br>(74.55)</sub></td>
-      <td align="right"><sub>77.90<br>(77.90)</sub></td>
-      <td align="right"><sub>76.34</sub></td>
-      <td align="right"><sub>96.60</sub></td>
-      <td align="right"><sub>75.64</sub></td>
-      <td align="right"><sub>28.57</sub></td>
-      <td align="right"><sub>26.19</sub></td>
-      <td align="right"><sub>29.95</sub></td>
-      <td align="center"><sub>✅</sub></td>
-    </tr>
-    <tr>
-      <td align="left"><sub><a href="https://arxiv.org/pdf/2404.07553">sfsort</a></sub></td>
-      <td align="center"><sub>✅</sub></td>
-      <td align="right"><sub>62.65<br>(62.66)</sub></td>
-      <td align="right"><sub>76.87<br>(76.74)</sub></td>
-      <td align="right"><sub>69.18<br>(69.18)</sub></td>
-      <td align="right"><sub>75.73</sub></td>
-      <td align="right"><sub>98.39</sub></td>
-      <td align="right"><sub>72.99</sub></td>
-      <td align="right"><sub>44.19</sub></td>
-      <td align="right"><sub>44.27</sub></td>
-      <td align="right"><sub>46.25</sub></td>
-      <td align="center"><sub>✅</sub></td>
-    </tr>
-  </tbody>
-</table>
-<!-- END TRACKER TABLE -->
-
-<sub>Py (C++); <code>—</code> unavailable. See <a href="docs/guides/benchmarks.md">Benchmark Workflows</a>.</sub>
-
-</div>
-
-Related guides:
-
-- [Evaluation and Postprocessing](docs/guides/evaluation.md)
-- [Benchmark Workflows](docs/guides/benchmarks.md)
-- [Native C++ Integration](docs/native/index.md)
-- [ReEKF-SORT Open Source Release](README_REEKFSORT.md)
-
-## Minimal Usage
-
-CLI:
+The release package does not include DanceTrack, MOT17, or MOT20 data. Prepare the paper evaluation splits with:
 
 ```bash
-boxmot track --detector yolo26n --reid lmbn_n_duke --tracker occluboost --source 0 --save --show
+python scripts/reproduce/prepare_reekfsort_assets.py
 ```
 
-Python:
+The expected locations after preparation are:
 
-```python
-import numpy as np
-from boxmot.trackers import OccluBoost
+- DanceTrack val: `boxmot/engine/eval/trackeval/data/test1/val`
+- MOT17 ablation: `boxmot/engine/eval/trackeval/data/MOT17/ablation`
+- MOT20 ablation: `boxmot/engine/eval/trackeval/data/MOT20/ablation`
 
-tracker = OccluBoost()
+Asset sources and expected local paths are documented in `docs/trackers/reekfsort_assets.md`.
 
-# dets: (N, 6) array with [x1, y1, x2, y2, conf, cls] per detection
-dets = np.array([[100, 200, 300, 400, 0.9, 0]], dtype=np.float32)
-img = np.zeros((480, 640, 3), dtype=np.uint8)  # current frame
+Use official or stable dataset pages when preparing data:
 
-# tracks: (M, 8) array with [x1, y1, x2, y2, id, conf, cls, det_ind] per track
-tracks = tracker.update(dets, img)
-print(tracks)
+| Benchmark | Required split | Official or stable source | Expected local path | Redistribution note |
+| --- | --- | --- | --- | --- |
+| DanceTrack | `val` | [Project](https://dancetrack.github.io/), [GitHub](https://github.com/DanceTrack/DanceTrack), [Hugging Face mirror](https://huggingface.co/datasets/noahcao/dancetrack) | `boxmot/engine/eval/trackeval/data/test1/val` | DanceTrack is for non-commercial research purposes only; do not redistribute it in this release. |
+| MOT17 | `ablation` | [MOTChallenge/Codabench MOT17](https://www.codabench.org/competitions/10049/) | `boxmot/engine/eval/trackeval/data/MOT17/ablation` | Download from official challenge pages or documented mirrors; do not bundle data. |
+| MOT20 | `ablation` | [MOTChallenge/Codabench MOT20](https://www.codabench.org/competitions/10050/) | `boxmot/engine/eval/trackeval/data/MOT20/ablation` | Download from official challenge pages or documented mirrors; do not bundle data. |
+
+## Detector Weights
+
+The release package does not include YOLOX checkpoints. Download or prepare the
+detector weights before evaluation, place them under `models/`, and verify the
+checksums:
+
+| Weight file | Download source | SHA256 | Provenance |
+| --- | --- | --- | --- |
+| `models/yolox_x_dancetrack.pt` | `https://huggingface.co/Lekim89/yolox/resolve/main/yolox_x_dancetrack.pt` | `f76e036f872a57710d9aebdfad2730e1c0e78bc3805e0526fa4b04a9e3c1d13d` | Third-party/release reproduction YOLOX checkpoint; not bundled and not claimed as an official Megvii YOLOX checkpoint. |
+| `models/yolox_x_MOT17_ablation.pt` | `https://huggingface.co/Lekim89/yolox/resolve/main/yolox_x_MOT17_ablation.pt` | `26cb8d2808664e5068a4c812d53becbc948b47fd6eacf2b45db049ab40c48b1a` | Third-party/release reproduction YOLOX checkpoint; not bundled and not claimed as an official Megvii YOLOX checkpoint. |
+| `models/yolox_x_MOT20_ablation.pt` | `https://huggingface.co/Lekim89/yolox/resolve/main/yolox_x_MOT20_ablation.pt` | `c8a49d9a58ab6dbc59e2f5daebb552513f6f5474acd9f62b47b4ef738e4900a3` | Third-party/release reproduction YOLOX checkpoint; not bundled and not claimed as an official Megvii YOLOX checkpoint. |
+
+If these URLs are not the final stable hosting location, publish the weights to
+a controlled Hugging Face repository, GitHub Release, or Zenodo record and update
+both the URLs and SHA256 values. ReEKF-SORT itself is motion-only, so no ReID
+checkpoint is required for the reported experiments.
+
+## Single Dataset Evaluation
+
+Generate detections once, then evaluate ReEKF-SORT from cached detections:
+
+```bash
+boxmot generate --benchmark dancetrack --split val --detector yolox_x_dancetrack
+boxmot eval --benchmark dancetrack --split val --tracker reekfsort --tracker-backend python --project runs/reekfsort_reproduce --name dancetrack_val --exist-ok
+
+boxmot generate --benchmark mot17 --split ablation --detector yolox_x_mot17_ablation
+boxmot eval --benchmark mot17 --split ablation --tracker reekfsort --tracker-backend python --project runs/reekfsort_reproduce --name mot17_ablation --exist-ok
+
+boxmot generate --benchmark mot20 --split ablation --detector yolox_x_mot20_ablation
+boxmot eval --benchmark mot20 --split ablation --tracker reekfsort --tracker-backend python --project runs/reekfsort_reproduce --name mot20_ablation --exist-ok
 ```
 
-## Contributing
+For MOT17 public detections:
 
-Start with [CONTRIBUTING.md](CONTRIBUTING.md) and the [contributor docs](docs/contributing/index.md).
+```bash
+boxmot generate --benchmark mot17 --split ablation --detection-source public
+boxmot eval --benchmark mot17 --split ablation --tracker reekfsort --detection-source public --tracker-backend python --project runs/reekfsort_reproduce --name mot17_public_ablation --exist-ok
+```
 
-## Support and Citation
+## Batch Ablation
 
-- Keep local research notes and citation metadata in [CITATION.cff](CITATION.cff).
+Run the full paper ablation matrix:
+
+```bash
+bash scripts/reproduce/reekfsort_ablation_all.sh
+```
+
+Run one benchmark or selected rows:
+
+```bash
+python scripts/reproduce/reekfsort_ablation.py --benchmark dancetrack --split val
+python scripts/reproduce/reekfsort_ablation.py --benchmark mot17 --split ablation --only reekfsort_no_angle reekfsort_full
+python scripts/reproduce/reekfsort_ablation.py --benchmark mot20 --split ablation --only reekfsort_motion_only reekfsort_no_angle
+```
+
+## Angle-Cost Ablation Conclusion
+
+The angle-cost branch is retained for controlled ablation, but it is not enabled in the final paper configuration. The final `Ours` setting uses virtual observation plus confidence cost and disables angle cost because the with-angle/full candidate did not provide the final default tradeoff across the evaluated benchmarks.
+
+## Results
+
+Evaluation and ablation outputs are written under `runs/` by default:
+
+- `runs/reekfsort_reproduce/` for single benchmark reproduction commands.
+- `runs/reekfsort_ablation/` for `scripts/reproduce/reekfsort_ablation.py`.
+
+These directories are generated artifacts and are excluded from the open-source release archive.
+
+## Open Source Package
+
+Generate the code-only release archive with:
+
+```bash
+bash scripts/reproduce/prepare_open_source_package.sh
+```
+
+The script writes:
+
+- `dist/reekfsort_open_source_release.tar.gz`
+- `dist/reekfsort_open_source_filelist.txt`
+- `dist/reekfsort_open_source_checksums.sha256`
