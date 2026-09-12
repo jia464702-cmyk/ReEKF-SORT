@@ -1114,6 +1114,9 @@ def run_generate_dets_embs(
     """Generate detections and embeddings for all sequences."""
     progress_callback = safe_progress_callback(progress_callback)
     _normalize_generate_args(args)
+    if os.environ.get("BOXMOT_NO_REID") == "1":
+        args.reid = []
+        args.reid_explicit = True
     verbose = bool(getattr(args, "verbose", False))
 
     if getattr(args, "data", None) and getattr(args, "source", None) is None:

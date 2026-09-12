@@ -1,33 +1,34 @@
 id: dancetrack
-
 dataset:
   id: dancetrack
-  root: "boxmot/engine/eval/trackeval/data/test1"
+  root: boxmot/engine/eval/trackeval/data/test1
   layout: mot
   box_type: aabb
   splits:
-    val: "val"
+    val: val
+    test: test
   default_split: val
   classes:
     1: pedestrian
-
+  no_gt_splits:
+  - test
 download:
-  dataset: "https://huggingface.co/datasets/noahcao/dancetrack/resolve/main/test1.zip"
-  runs: ""
-
+  dataset: ''
+  runs: ''
 detector:
   id: yolox_x_dancetrack
-  model: "models/yolox_x_dancetrack.pt"
-  url: "https://huggingface.co/Lekim89/yolox/resolve/main/yolox_x_dancetrack.pt"
-  imgsz: [800, 1440]
+  model: models/yolox_x_dancetrack.pt
+  url: https://huggingface.co/Lekim89/yolox/resolve/main/yolox_x_dancetrack.pt
+  imgsz:
+  - 800
+  - 1440
   conf: 0.01
   classes:
     0: person
-
 reid:
   id: lmbn_n_duke
-  model: "models/lmbn_n_duke.pt"
-  url: "https://example.com/reid/lmbn_n_duke.pth"
-  device: ""
+  model: ''
+  url: ''
+  device: ''
   half: true
   preprocess: resize

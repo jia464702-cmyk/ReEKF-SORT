@@ -14,8 +14,21 @@ from boxmot.data.benchmark import (
 from boxmot.utils import logger as LOGGER
 from boxmot.utils.rich.ui import print_text
 
-SUMMARY_COLUMNS = ("HOTA", "MOTA", "IDF1", "AssA", "AssRe", "IDSW", "IDs")
-SUMMARY_INT_COLUMNS = {"IDSW", "IDs"}
+SUMMARY_COLUMNS = (
+    "HOTA",
+    "MOTA",
+    "IDF1",
+    "AssA",
+    "AssRe",
+    "DetA",
+    "IDSW",
+    "Frag",
+    "CLR_FP",
+    "CLR_FN",
+    "IDs",
+)
+SUMMARY_COLUMN_LABELS = {"CLR_FP": "FP", "CLR_FN": "FN"}
+SUMMARY_INT_COLUMNS = {"IDSW", "Frag", "CLR_FP", "CLR_FN", "IDs"}
 TRACKEVAL_INTEGER_FIELDS = {
     "CLR_TP",
     "CLR_FN",
@@ -517,7 +530,10 @@ def _render_summary_table(
     if not rows:
         return ""
 
-    header_values = [name_header, *SUMMARY_COLUMNS]
+    header_values = [
+        name_header,
+        *(SUMMARY_COLUMN_LABELS.get(column, column) for column in SUMMARY_COLUMNS),
+    ]
     header_fmt = f"{{:<{name_width}}} " + " ".join(["{:>10}"] * len(SUMMARY_COLUMNS))
     compare_enabled = any(compare_metrics is not None for _, _, compare_metrics in rows)
 

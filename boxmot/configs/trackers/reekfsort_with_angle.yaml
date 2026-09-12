@@ -43,6 +43,11 @@ confidence_eps:
   default: 0.000001
   range: [0.000001, 0.001]
 
+confidence_cost_mode:
+  type: choice
+  default: normalized
+  options: [normalized, absolute, raw, none]
+
 angle_smoothing:
   type: uniform
   default: 0.8

@@ -5,7 +5,7 @@ from typing import Any
 
 import numpy as np
 
-from boxmot.trackers.association import linear_assignment
+from boxmot.trackers.association import linear_assignment, speed_direction_batch
 from boxmot.trackers.basetracker import BaseTracker
 from boxmot.trackers.ops import xyxy2xysr
 
@@ -22,6 +22,60 @@ def _bbox_center(bbox: np.ndarray) -> tuple[float, float]:
         float((bbox[0] + bbox[2]) * 0.5),
         float((bbox[1] + bbox[3]) * 0.5),
     )
+
+
+def _k_previous_observation(
+    observations: dict[int, np.ndarray], current_age: int, delta_t: int
+) -> np.ndarray:
+    """Return the latest observation up to ``delta_t`` frames in the past."""
+    if not observations:
+        return np.full(5, -1.0, dtype=float)
+    for offset in range(delta_t, 0, -1):
+        if current_age - offset in observations:
+            return observations[current_age - offset]
+    return observations[max(observations)]
+
+
+def _speed_direction(bbox1: np.ndarray, bbox2: np.ndarray) -> np.ndarray:
+    """Return normalized image-plane motion as ``[dy, dx]``."""
+    center1 = _bbox_center(bbox1)
+    center2 = _bbox_center(bbox2)
+    delta = np.array([center2[1] - center1[1], center2[0] - center1[0]])
+    return delta / (np.linalg.norm(delta) + 1e-6)
+
+
+CONFIDENCE_COST_MODES = ("absolute", "normalized", "raw", "none")
+
+
+def confidence_continuity_cost(
+    detection_confidences: np.ndarray,
+    track_confidences: np.ndarray,
+    *,
+    mode: str = "absolute",
+    eps: float = 1e-6,
+) -> np.ndarray:
+    """Return a detection-to-track confidence cost matrix.
+
+    ``absolute`` is the validation-selected paper formulation. The other modes
+    are exposed for controlled ablation. In particular, ``raw`` is a joint-score
+    baseline and must not be interpreted as a calibrated match probability.
+    """
+    selected_mode = str(mode).lower()
+    if selected_mode not in CONFIDENCE_COST_MODES:
+        raise ValueError(
+            "confidence_cost_mode must be one of: normalized, absolute, raw, none"
+        )
+
+    det_confs = np.asarray(detection_confidences, dtype=float).reshape(-1, 1)
+    trk_confs = np.asarray(track_confidences, dtype=float).reshape(1, -1)
+    shape = (det_confs.shape[0], trk_confs.shape[1])
+    if selected_mode == "normalized":
+        return np.abs(det_confs - trk_confs) / (det_confs + trk_confs + eps)
+    if selected_mode == "absolute":
+        return np.abs(det_confs - trk_confs)
+    if selected_mode == "raw":
+        return 1.0 - det_confs * trk_confs
+    return np.zeros(shape, dtype=float)
 
 
 def _bbox_to_measurement(
@@ -181,7 +235,10 @@ class SpeedAngleEkf:
         S = self.H @ self.P @ self.H.T + obs_noise
         K = self.P @ self.H.T @ np.linalg.pinv(S)
         self.x = self.x + K @ innovation
-        self.P = (self._I - K @ self.H) @ self.P
+        # Joseph-form covariance update is more numerically stable than the
+        # abbreviated (I-KH)P form and better preserves positive semidefiniteness.
+        ikh = self._I - K @ self.H
+        self.P = ikh @ self.P @ ikh.T + K @ obs_noise @ K.T
 
         self.x[2, 0] = max(float(self.x[2, 0]), 1e-6)
         self.x[3, 0] = max(float(self.x[3, 0]), 1e-6)
@@ -211,8 +268,9 @@ class ReEkfTrack:
         angle_smoothing: float = 0.8,
         angular_velocity_smoothing: float = 0.8,
         confidence_decay: float = 0.95,
-        virtual_update_interval: int = 2,
+        virtual_update_interval: int = 6,
         virtual_obs_noise_scale: float = 10.0,
+        delta_t: int = 3,
         Q_xy_scaling: float = 0.01,
         Q_s_scaling: float = 0.0001,
         Q_angle_scaling: float = 0.001,
@@ -247,6 +305,8 @@ class ReEkfTrack:
         self.confidence_decay = float(confidence_decay)
         self.virtual_update_interval = max(1, int(virtual_update_interval))
         self.virtual_obs_noise_scale = float(virtual_obs_noise_scale)
+        self.delta_t = max(1, int(delta_t))
+        self.velocity: np.ndarray | None = None
 
         self.smoothed_angle = float(self.kf.x[5, 0])
         self.smoothed_angular_velocity = 0.0
@@ -294,6 +354,11 @@ class ReEkfTrack:
         self.cls = cls
 
         reference_bbox = None if self.last_observation.sum() < 0 else self.last_observation
+        if self.observations:
+            previous_bbox = _k_previous_observation(
+                self.observations, self.age, self.delta_t
+            )
+            self.velocity = _speed_direction(previous_bbox, bbox)
         self._store_reliable_motion(bbox)
         z = _bbox_to_measurement(
             bbox,
@@ -382,16 +447,22 @@ def associate_reekf(
     lambda_conf: float,
     lambda_angle: float,
     eps: float,
+    confidence_cost_mode: str = "absolute",
+    velocities: np.ndarray | None = None,
+    previous_observations: np.ndarray | None = None,
+    inertia: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Associate detections and tracks with ReEKF-SORT's three-term cost.
+    """Associate detections and tracks with confidence and OC motion cues.
 
     The final matrix minimizes:
-        (1 - IoU) + lambda_conf * confidence_continuity
-                  + lambda_angle * motion_angle_consistency
+        (1 - IoU) - observation_centric_direction_reward
+                  + lambda_conf * confidence_continuity
+                  + lambda_angle * EKF_angle_consistency
 
-    Confidence is deliberately used as a relative continuity cue rather than an
-    absolute score. This keeps low/high detector scores from directly selecting
-    a match while still penalizing abrupt confidence jumps under heavy overlap.
+    The paper configuration uses the absolute difference between the current
+    detection confidence and the track's predicted confidence. This penalizes
+    abrupt confidence changes without treating either score as a calibrated
+    match probability.
     """
     if len(trackers) == 0:
         return (
@@ -410,11 +481,12 @@ def associate_reekf(
     iou_matrix = np.asarray(asso_func(detections, trackers), dtype=float)
     iou_cost = 1.0 - iou_matrix
 
-    det_confs = detections[:, 4][:, None]
-    trk_confs = np.array(
-        [trk.predicted_confidence for trk in tracks], dtype=float
-    )[None, :]
-    conf_cost = np.abs(det_confs - trk_confs) / (det_confs + trk_confs + eps)
+    conf_cost = confidence_continuity_cost(
+        detections[:, 4],
+        [trk.predicted_confidence for trk in tracks],
+        mode=confidence_cost_mode,
+        eps=eps,
+    )
 
     angle_cost = np.zeros_like(iou_cost)
     for det_idx, det in enumerate(detections):
@@ -426,7 +498,38 @@ def associate_reekf(
                 _wrap_angle(det_angle - trk.predicted_angle)
             )
 
-    cost_matrix = iou_cost + lambda_conf * conf_cost + lambda_angle * angle_cost
+    direction_reward = np.zeros_like(iou_cost)
+    if (
+        inertia > 0.0
+        and velocities is not None
+        and previous_observations is not None
+        and len(previous_observations) == len(trackers)
+    ):
+        direction_y, direction_x = speed_direction_batch(
+            detections, previous_observations
+        )
+        track_velocities = np.asarray(velocities, dtype=float)
+        velocity_y = np.repeat(
+            track_velocities[:, 0, np.newaxis], direction_y.shape[1], axis=1
+        )
+        velocity_x = np.repeat(
+            track_velocities[:, 1, np.newaxis], direction_x.shape[1], axis=1
+        )
+        cosine = np.clip(
+            velocity_x * direction_x + velocity_y * direction_y, -1.0, 1.0
+        )
+        angular_reward = (np.pi / 2.0 - np.abs(np.arccos(cosine))) / np.pi
+        valid = (np.asarray(previous_observations)[:, 4] >= 0).astype(float)
+        angular_reward *= valid[:, np.newaxis]
+        angular_reward *= detections[:, 4][np.newaxis, :]
+        direction_reward = (float(inertia) * angular_reward).T
+
+    cost_matrix = (
+        iou_cost
+        - direction_reward
+        + lambda_conf * conf_cost
+        + lambda_angle * angle_cost
+    )
     matched_indices = linear_assignment(cost_matrix)
     if matched_indices.size == 0:
         matched_indices = np.empty((0, 2), dtype=int)
@@ -463,6 +566,60 @@ def associate_reekf(
     )
 
 
+def rematch_last_observations(
+    detections: np.ndarray,
+    last_observations: np.ndarray,
+    unmatched_detections: np.ndarray,
+    unmatched_trackers: np.ndarray,
+    asso_func,
+    iou_threshold: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Run OC-SORT's OCR pass against the last real observations."""
+    if len(unmatched_detections) == 0 or len(unmatched_trackers) == 0:
+        return (
+            np.empty((0, 2), dtype=int),
+            unmatched_detections,
+            unmatched_trackers,
+        )
+
+    iou_matrix = np.asarray(
+        asso_func(
+            detections[unmatched_detections],
+            last_observations[unmatched_trackers],
+        ),
+        dtype=float,
+    )
+    if iou_matrix.size == 0 or iou_matrix.max() <= iou_threshold:
+        return (
+            np.empty((0, 2), dtype=int),
+            unmatched_detections,
+            unmatched_trackers,
+        )
+
+    assignments = linear_assignment(-iou_matrix)
+    matches = []
+    for det_pos, trk_pos in assignments:
+        if iou_matrix[det_pos, trk_pos] < iou_threshold:
+            continue
+        matches.append(
+            [unmatched_detections[det_pos], unmatched_trackers[trk_pos]]
+        )
+
+    if not matches:
+        return (
+            np.empty((0, 2), dtype=int),
+            unmatched_detections,
+            unmatched_trackers,
+        )
+
+    matches_array = np.asarray(matches, dtype=int)
+    return (
+        matches_array,
+        np.setdiff1d(unmatched_detections, matches_array[:, 0]),
+        np.setdiff1d(unmatched_trackers, matches_array[:, 1]),
+    )
+
+
 class ReEkfSort(BaseTracker):
     """ReEKF-SORT tracker based on causal EKF prediction and confidence continuity."""
 
@@ -474,11 +631,16 @@ class ReEkfSort(BaseTracker):
         lambda_conf: float = 1.2,
         lambda_angle: float = 0.0,
         confidence_eps: float = 1e-6,
+        confidence_cost_mode: str = "absolute",
         angle_smoothing: float = 0.8,
         angular_velocity_smoothing: float = 0.8,
         confidence_decay: float = 0.95,
-        virtual_update_interval: int = 2,
+        virtual_update_interval: int = 6,
         virtual_obs_noise_scale: float = 10.0,
+        delta_t: int = 3,
+        inertia: float = 0.1,
+        use_observation_centric: bool = True,
+        use_ocr: bool = True,
         use_virtual_observation: bool = True,
         use_confidence_cost: bool = True,
         use_angle_cost: bool = False,
@@ -501,11 +663,20 @@ class ReEkfSort(BaseTracker):
         self.lambda_conf = float(lambda_conf)
         self.lambda_angle = float(lambda_angle)
         self.confidence_eps = float(confidence_eps)
+        self.confidence_cost_mode = str(confidence_cost_mode).lower()
+        if self.confidence_cost_mode not in CONFIDENCE_COST_MODES:
+            raise ValueError(
+                "confidence_cost_mode must be one of: normalized, absolute, raw, none"
+            )
         self.angle_smoothing = float(angle_smoothing)
         self.angular_velocity_smoothing = float(angular_velocity_smoothing)
         self.confidence_decay = float(confidence_decay)
         self.virtual_update_interval = int(virtual_update_interval)
         self.virtual_obs_noise_scale = float(virtual_obs_noise_scale)
+        self.delta_t = max(1, int(delta_t))
+        self.inertia = float(inertia)
+        self.use_observation_centric = bool(use_observation_centric)
+        self.use_ocr = bool(use_ocr)
         self.use_virtual_observation = bool(use_virtual_observation)
         self.use_confidence_cost = bool(use_confidence_cost)
         self.use_angle_cost = bool(use_angle_cost)
@@ -545,6 +716,24 @@ class ReEkfSort(BaseTracker):
         for t in reversed(to_del):
             self.active_tracks.pop(t)
 
+        velocities = np.array(
+            [
+                trk.velocity if trk.velocity is not None else np.zeros(2)
+                for trk in self.active_tracks
+            ]
+        )
+        previous_observations = np.array(
+            [
+                _k_previous_observation(
+                    trk.observations, trk.age, self.delta_t
+                )
+                for trk in self.active_tracks
+            ]
+        )
+        last_observations = np.array(
+            [trk.last_observation for trk in self.active_tracks]
+        )
+
         matched, unmatched_dets, unmatched_trks = associate_reekf(
             dets[:, : self.detection_layout.box_with_conf_cols],
             trks,
@@ -554,6 +743,10 @@ class ReEkfSort(BaseTracker):
             self.lambda_conf if self.use_confidence_cost else 0.0,
             self.lambda_angle if self.use_angle_cost else 0.0,
             self.confidence_eps,
+            self.confidence_cost_mode,
+            velocities=velocities,
+            previous_observations=previous_observations,
+            inertia=self.inertia if self.use_observation_centric else 0.0,
         )
 
         for det_idx, trk_idx in matched:
@@ -562,6 +755,22 @@ class ReEkfSort(BaseTracker):
                 dets[det_idx, self.detection_layout.cls_idx],
                 dets[det_idx, self.detection_layout.det_cols],
             )
+
+        if self.use_ocr:
+            rematched, unmatched_dets, unmatched_trks = rematch_last_observations(
+                dets[:, : self.detection_layout.box_with_conf_cols],
+                last_observations,
+                unmatched_dets,
+                unmatched_trks,
+                self.asso_func,
+                self.asso_threshold,
+            )
+            for det_idx, trk_idx in rematched:
+                self.active_tracks[trk_idx].update(
+                    dets[det_idx, :-2],
+                    dets[det_idx, self.detection_layout.cls_idx],
+                    dets[det_idx, self.detection_layout.det_cols],
+                )
 
         for trk_idx in unmatched_trks:
             if self.use_virtual_observation:
@@ -578,6 +787,7 @@ class ReEkfSort(BaseTracker):
                 confidence_decay=self.confidence_decay,
                 virtual_update_interval=self.virtual_update_interval,
                 virtual_obs_noise_scale=self.virtual_obs_noise_scale,
+                delta_t=self.delta_t,
                 Q_xy_scaling=self.Q_xy_scaling,
                 Q_s_scaling=self.Q_s_scaling,
                 Q_angle_scaling=self.Q_angle_scaling,

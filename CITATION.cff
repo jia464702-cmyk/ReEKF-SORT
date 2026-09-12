@@ -22,8 +22,10 @@ abstract: >-
 
 title: "Online multi-object occlusion tracking based on causal motion prediction and confidence-continuity association"
 license: AGPL-3.0
-version: 21.0.0
-date-released: "2026-06-17"
+version: 1.0.0
+date-released: "2026-09-12"
+repository-code: "https://github.com/jia464702-cmyk/ReEKF-SORT"
+url: "https://github.com/jia464702-cmyk/ReEKF-SORT"
 type: software
 preferred-citation:
   type: article

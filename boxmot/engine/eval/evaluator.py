@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import math
+import zipfile
 from pathlib import Path
 from typing import Optional
 
@@ -115,6 +118,121 @@ def _load_benchmark_cfg(args: argparse.Namespace) -> dict:
 
 def _resolve_eval_box_type(args: argparse.Namespace, bench_cfg: Optional[dict] = None) -> str:
     return resolve_eval_box_type(args, bench_cfg)
+
+
+def _is_no_gt_split(args: argparse.Namespace, cfg: Optional[dict] = None) -> bool:
+    """Return whether the selected benchmark split intentionally has no ground truth."""
+    cfg = _load_benchmark_cfg(args) if cfg is None else cfg
+    if not isinstance(cfg, dict):
+        return False
+    scopes = [cfg]
+    for key in ("dataset", "benchmark"):
+        nested = cfg.get(key)
+        if isinstance(nested, dict):
+            scopes.append(nested)
+    no_gt_splits = {
+        str(value).lower()
+        for scope in scopes
+        for value in (scope.get("no_gt_splits") or [])
+    }
+    return str(getattr(args, "split", "")).lower() in no_gt_splits
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _prepare_no_gt_submission(args: argparse.Namespace) -> dict:
+    """Validate tracker outputs and create an official 10-column submission archive."""
+    exp_dir = Path(args.exp_dir)
+    _, seq_info = _collect_seq_info(args.source)
+    expected = set(seq_info)
+    actual = {path.stem for path in exp_dir.glob("*.txt")}
+    if actual != expected:
+        missing = sorted(expected - actual)
+        unexpected = sorted(actual - expected)
+        raise RuntimeError(f"Submission sequence mismatch; missing={missing}, unexpected={unexpected}")
+
+    submission_dir = exp_dir / "submission"
+    submission_dir.mkdir(parents=True, exist_ok=True)
+    sequence_records = []
+    total_rows = 0
+    for seq_name in sorted(expected):
+        source_path = exp_dir / f"{seq_name}.txt"
+        target_path = submission_dir / source_path.name
+        row_count = 0
+        min_frame = None
+        max_frame = None
+        with source_path.open("r", encoding="utf-8") as source, target_path.open("w", encoding="utf-8", newline="") as target:
+            for line_number, line in enumerate(source, start=1):
+                if not line.strip():
+                    continue
+                fields = line.strip().split(",")
+                if len(fields) not in (9, 10):
+                    raise RuntimeError(f"{source_path}:{line_number}: expected 9 or 10 columns, got {len(fields)}")
+                try:
+                    values = [float(value) for value in fields]
+                except ValueError as exc:
+                    raise RuntimeError(f"{source_path}:{line_number}: non-numeric value") from exc
+                if not all(math.isfinite(value) for value in values):
+                    raise RuntimeError(f"{source_path}:{line_number}: non-finite value")
+                frame_id, track_id = int(values[0]), int(values[1])
+                if frame_id < 1 or frame_id > int(seq_info[seq_name]):
+                    raise RuntimeError(f"{source_path}:{line_number}: frame {frame_id} outside sequence range")
+                if track_id < 1 or values[4] <= 0 or values[5] <= 0:
+                    raise RuntimeError(f"{source_path}:{line_number}: invalid track id or box dimensions")
+                target.write(
+                    f"{frame_id},{track_id},{values[2]:.3f},{values[3]:.3f},"
+                    f"{values[4]:.3f},{values[5]:.3f},{values[6]:.6f},-1,-1,-1\n"
+                )
+                row_count += 1
+                min_frame = frame_id if min_frame is None else min(min_frame, frame_id)
+                max_frame = frame_id if max_frame is None else max(max_frame, frame_id)
+        if row_count == 0:
+            raise RuntimeError(f"Submission file is empty: {source_path}")
+        total_rows += row_count
+        sequence_records.append(
+            {
+                "sequence": seq_name,
+                "rows": row_count,
+                "min_frame": min_frame,
+                "max_frame": max_frame,
+                "seq_length": int(seq_info[seq_name]),
+                "sha256": _sha256(target_path),
+            }
+        )
+
+    archive_path = exp_dir / f"{getattr(args, 'benchmark', 'benchmark')}_{getattr(args, 'split', 'test')}_submission.zip"
+    with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
+        for seq_name in sorted(expected):
+            txt_path = submission_dir / f"{seq_name}.txt"
+            info = zipfile.ZipInfo(txt_path.name, date_time=(1980, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o644 << 16
+            archive.writestr(
+                info,
+                txt_path.read_bytes(),
+                compress_type=zipfile.ZIP_DEFLATED,
+                compresslevel=6,
+            )
+
+    summary = {
+        "status": "ready",
+        "format": "MOTChallenge 10-column",
+        "sequence_count": len(sequence_records),
+        "total_rows": total_rows,
+        "archive": str(archive_path),
+        "archive_sha256": _sha256(archive_path),
+        "sequences": sequence_records,
+    }
+    (exp_dir / "submission_manifest.json").write_text(
+        json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    return summary
 
 
 def _configure_benchmark_runtime(args: argparse.Namespace) -> tuple[dict, dict, dict]:
@@ -350,12 +468,18 @@ def run_eval(
             quiet=not bool(show_progress),
             progress_callback=pipeline.callback() if pipeline and show_progress else None,
         )
+    no_gt_split = _is_no_gt_split(args)
     if pipeline is not None:
-        pipeline.advance("Computing metrics...")
+        pipeline.advance("Preparing submission..." if no_gt_split else "Computing metrics...")
 
-    # -- Evaluate --
-    raw_results = run_trackeval(args, verbose=verbose and not has_pipeline)
-    summary_label, summary = extract_summary(raw_results)
+    # -- Evaluate or package a no-GT test submission --
+    if no_gt_split:
+        raw_results = {}
+        summary_label = "submission"
+        summary = _prepare_no_gt_submission(args)
+    else:
+        raw_results = run_trackeval(args, verbose=verbose and not has_pipeline)
+        summary_label, summary = extract_summary(raw_results)
     result = ValidationResult(
         benchmark=str(getattr(args, "benchmark", getattr(args, "data", ""))),
         raw=raw_results,
@@ -382,6 +506,19 @@ def main(args):
     pipeline = EvalWorkflowReporter(args).pipeline()
     with pipeline:
         result = run_eval(args, verbose=False, pipeline=pipeline)
+
+    if result.exp_dir is not None:
+        result_name = "submission_result.json" if result.summary_label == "submission" else "experiment_results.json"
+        result_path = Path(result.exp_dir) / result_name
+        result_path.write_text(
+            json.dumps(result.to_dict(include_raw=True), indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        if result.summary_label == "submission":
+            manifest_path = Path(result.exp_dir) / "submission_manifest.json"
+            manifest = dict(result.summary)
+            manifest["timings"] = result.timings
+            manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
 
     plot_class, metrics_data = _select_plot_metrics_data(result.raw)
     if metrics_data:
