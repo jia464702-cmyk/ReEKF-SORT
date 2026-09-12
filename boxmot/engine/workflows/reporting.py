@@ -23,9 +23,22 @@ from boxmot.utils.rich.ui import (
 )
 from boxmot.utils.timing import TimingStats, build_timing_display_rows, derive_timing_breakdown
 
-SUMMARY_COLUMNS = ("HOTA", "MOTA", "IDF1", "AssA", "AssRe", "IDSW", "IDs")
+SUMMARY_COLUMNS = (
+    "HOTA",
+    "MOTA",
+    "IDF1",
+    "AssA",
+    "AssRe",
+    "DetA",
+    "IDSW",
+    "Frag",
+    "CLR_FP",
+    "CLR_FN",
+    "IDs",
+)
 CORE_SUMMARY_COLUMNS = ("HOTA", "MOTA", "IDF1")
-SUMMARY_INT_COLUMNS = {"IDSW", "IDs"}
+SUMMARY_COLUMN_LABELS = {"CLR_FP": "FP", "CLR_FN": "FN"}
+SUMMARY_INT_COLUMNS = {"IDSW", "Frag", "CLR_FP", "CLR_FN", "IDs"}
 DEFAULT_VALIDATION_REPORT_TITLE = "VAL RESULTS"
 DEFAULT_TUNE_BEST_REPORT_TITLE = "TUNE BEST RESULTS"
 CLI_RESULTS_SUMMARY_TITLE = "📊 RESULTS SUMMARY"
@@ -105,7 +118,12 @@ def _build_sequence_table(
     )
     table.add_column(name_header, style=STYLE_TEXT_STRONG, no_wrap=True, ratio=3)
     for column in SUMMARY_COLUMNS:
-        table.add_column(column, justify="right", no_wrap=True, ratio=1)
+        table.add_column(
+            SUMMARY_COLUMN_LABELS.get(column, column),
+            justify="right",
+            no_wrap=True,
+            ratio=1,
+        )
 
     compare_values = list(compare_rows) if compare_rows is not None else []
 

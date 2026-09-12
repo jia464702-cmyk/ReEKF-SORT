@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shutil
 import sys
@@ -138,6 +139,31 @@ def download_http(url: str, dest: Path, overwrite: bool = False) -> Path:
                     bar.update(len(chunk))
     tmp.replace(dest)
     return dest
+
+
+def sha256sum(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def verify_weight(path: Path) -> None:
+    expected = WEIGHT_SHA256.get(path.as_posix())
+    if expected is None:
+        try:
+            expected = WEIGHT_SHA256[path.resolve().relative_to(repo_root()).as_posix()]
+        except ValueError:
+            expected = None
+    if expected is None:
+        raise RuntimeError(f"No expected SHA256 is registered for {path}")
+    actual = sha256sum(path)
+    if actual.lower() != expected.lower():
+        raise RuntimeError(
+            f"SHA256 mismatch for {path}: expected {expected}, got {actual}. "
+            "Delete the file and download it again; do not use an unverified checkpoint."
+        )
 
 
 def extract_zip(zip_path: Path, dest: Path, overwrite: bool = False) -> None:
@@ -361,11 +387,26 @@ def parse_args() -> argparse.Namespace:
         help="Prepare selected benchmarks only. Defaults to all three.",
     )
     parser.add_argument("--overwrite", action="store_true", help="Redownload existing files.")
+    parser.add_argument(
+        "--accept-dataset-terms",
+        action="store_true",
+        help="Confirm non-commercial/research-only dataset terms before automatic download.",
+    )
+    parser.add_argument(
+        "--verify-only",
+        action="store_true",
+        help="Do not download; verify expected dataset layout and detector checksums.",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    if not args.verify_only and not args.skip_datasets and not args.accept_dataset_terms:
+        raise SystemExit(
+            "Automatic dataset download requires --accept-dataset-terms. "
+            "Review docs/trackers/reekfsort_server_setup.md before continuing."
+        )
     plan = [("dancetrack", "val"), ("mot17", "ablation"), ("mot20", "ablation")]
     if args.only:
         selected = set(args.only)
@@ -376,23 +417,48 @@ def main() -> int:
     dataset_paths: dict[str, Path] = {}
     detector_paths: dict[str, Path] = {}
 
-    if not args.skip_datasets:
+    if args.verify_only:
+        for asset in datasets:
+            dataset_paths[asset.benchmark] = repo_root() / asset.root
+    elif not args.skip_datasets:
         for asset in datasets:
             dataset_paths[asset.benchmark] = download_dataset(asset, overwrite=args.overwrite)
     else:
         for asset in datasets:
             dataset_paths[asset.benchmark] = repo_root() / asset.root
 
-    if not args.skip_weights:
+    if args.verify_only:
+        for asset in detectors:
+            detector_paths[asset.benchmark] = repo_root() / asset.model
+    elif not args.skip_weights:
         for asset in detectors:
             target = repo_root() / asset.model
             detector_paths[asset.benchmark] = download_http(asset.url, target, overwrite=args.overwrite)
+            verify_weight(detector_paths[asset.benchmark])
     else:
         for asset in detectors:
             detector_paths[asset.benchmark] = repo_root() / asset.model
 
+    errors = []
+    for asset in datasets:
+        status = dataset_status(asset, dataset_paths[asset.benchmark])
+        if status != "present":
+            errors.append(f"dataset {asset.benchmark}/{asset.split}: {status}")
+    for asset in detectors:
+        path = detector_paths[asset.benchmark]
+        if not path.exists():
+            errors.append(f"weight {path}: missing")
+            continue
+        try:
+            verify_weight(path)
+        except RuntimeError as exc:
+            errors.append(str(exc))
+
     version_doc = write_versions(datasets, detectors, dataset_paths, detector_paths)
     print(f"Wrote {version_doc}")
+    if errors:
+        raise SystemExit("Asset verification failed:\n- " + "\n- ".join(errors))
+    print("All selected datasets and detector weights passed verification.")
     return 0
 
 

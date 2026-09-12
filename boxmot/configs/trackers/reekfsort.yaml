@@ -23,6 +23,26 @@ iou_threshold:
   default: 0.3
   range: [0.1, 0.5]
 
+delta_t:
+  type: grid_search
+  default: 3
+  values: [1, 2, 3, 4, 5]
+
+inertia:
+  type: uniform
+  default: 0.1
+  range: [0.0, 0.4]
+
+use_observation_centric:
+  type: choice
+  default: true
+  options: [true, false]
+
+use_ocr:
+  type: choice
+  default: true
+  options: [true, false]
+
 asso_func:
   type: choice
   default: iou
@@ -43,6 +63,11 @@ confidence_eps:
   default: 0.000001
   range: [0.000001, 0.001]
 
+confidence_cost_mode:
+  type: choice
+  default: absolute
+  options: [absolute, normalized, raw, none]
+
 angle_smoothing:
   type: uniform
   default: 0.8
@@ -60,8 +85,8 @@ confidence_decay:
 
 virtual_update_interval:
   type: grid_search
-  default: 2
-  values: [1, 2, 4, 6]
+  default: 6
+  values: [1, 2, 4, 6, 8, 10]
 
 virtual_obs_noise_scale:
   type: loguniform

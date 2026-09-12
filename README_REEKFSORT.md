@@ -13,6 +13,14 @@ This repository package contains source code, configs, documentation, and reprod
 The paper final `Ours` configuration is the no-angle setting in `boxmot/configs/trackers/reekfsort.yaml`:
 
 ```yaml
+confidence_cost_mode:
+  default: absolute
+lambda_conf:
+  default: 1.2
+virtual_update_interval:
+  default: 6
+virtual_obs_noise_scale:
+  default: 10.0
 use_virtual_observation:
   default: true
 use_confidence_cost:
@@ -24,6 +32,12 @@ lambda_angle:
 ```
 
 `boxmot/configs/trackers/reekfsort_with_angle.yaml` preserves the with-angle/full candidate for ablation only. It is not the paper final `Ours` setting.
+
+The manuscript must therefore describe the final association cost as
+`IoU cost + lambda_conf * absolute confidence-continuity cost`. The
+motion-angle association term is retained only as a controlled ablation; angle
+and angular velocity remain part of the EKF state and causal virtual-observation
+generator.
 
 ## Citation And License Status
 
@@ -41,6 +55,20 @@ retain their original licenses, including TrackEval under MIT and YOLOX under
 Apache-2.0.
 
 ## Environment
+
+For a shared Ubuntu server with an RTX 3090, first inspect GPU usage without
+starting any job:
+
+```bash
+bash scripts/reproduce/run_reekfsort_lab.sh status
+```
+
+The shared-server release intentionally disables the `all` and `experiments`
+batch actions. Environment and assets are prepared separately, then each cache,
+baseline, ablation, sweep, and efficiency job is launched manually after another
+GPU status check. Completed orchestrated tasks are still recorded in
+`runs/reekfsort_pipeline/state.json`. See
+`docs/trackers/reekfsort_server_setup.md` for the exact manual sequence.
 
 Use Python 3.10 or newer. A minimal source checkout workflow is:
 
@@ -134,11 +162,30 @@ python scripts/reproduce/reekfsort_ablation.py --benchmark mot17 --split ablatio
 python scripts/reproduce/reekfsort_ablation.py --benchmark mot20 --split ablation --only reekfsort_motion_only reekfsort_no_angle
 ```
 
+Run targeted confidence and parameter sweeps from the same cached detections:
+
+```bash
+python scripts/reproduce/reekfsort_sweeps.py --benchmark dancetrack --split val --sweep confidence_mode
+python scripts/reproduce/reekfsort_sweeps.py --benchmark dancetrack --split val --sweep lambda_conf
+python scripts/reproduce/reekfsort_sweeps.py --benchmark dancetrack --split val --sweep virtual_interval
+python scripts/reproduce/reekfsort_sweeps.py --benchmark dancetrack --split val --sweep virtual_noise
+```
+
+Each non-dry run writes a JSON manifest containing the command and complete
+tracker configuration. Keep these manifests together with the TrackEval output
+used to populate manuscript tables.
+
 ## Angle-Cost Ablation Conclusion
 
 The angle-cost branch is retained for controlled ablation, but it is not enabled in the final paper configuration. The final `Ours` setting uses virtual observation plus confidence cost and disables angle cost because the with-angle/full candidate did not provide the final default tradeoff across the evaluated benchmarks.
 
 ## Results
+
+Compact ablation and test-artifact metadata are versioned in
+[`results/paper`](results/paper/README.md). The MOT20 comparison is retained as
+a negative result: the final configuration underperforms OC-SORT on HOTA,
+IDF1, and identity switches in this dense benchmark. Tracker-only timing in the
+CSV files uses cached detections and must not be presented as end-to-end speed.
 
 Evaluation and ablation outputs are written under `runs/` by default:
 

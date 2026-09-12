@@ -13,6 +13,14 @@ This repository package contains source code, configs, documentation, and reprod
 The paper final `Ours` configuration is the no-angle setting in `boxmot/configs/trackers/reekfsort.yaml`:
 
 ```yaml
+confidence_cost_mode:
+  default: absolute
+lambda_conf:
+  default: 1.2
+virtual_update_interval:
+  default: 6
+virtual_obs_noise_scale:
+  default: 10.0
 use_virtual_observation:
   default: true
 use_confidence_cost:
@@ -66,8 +74,11 @@ python scripts/reproduce/prepare_reekfsort_assets.py
 The expected locations after preparation are:
 
 - DanceTrack val: `boxmot/engine/eval/trackeval/data/test1/val`
+- DanceTrack test: `boxmot/engine/eval/trackeval/data/test1/test`
 - MOT17 ablation: `boxmot/engine/eval/trackeval/data/MOT17/ablation`
+- MOT17 test: `boxmot/engine/eval/trackeval/data/MOT17/test`
 - MOT20 ablation: `boxmot/engine/eval/trackeval/data/MOT20/ablation`
+- MOT20 test: `boxmot/engine/eval/trackeval/data/MOT20/test`
 
 Asset sources and expected local paths are documented in `docs/trackers/reekfsort_assets.md`.
 
@@ -89,7 +100,9 @@ checksums:
 | --- | --- | --- | --- |
 | `models/yolox_x_dancetrack.pt` | `https://huggingface.co/Lekim89/yolox/resolve/main/yolox_x_dancetrack.pt` | `f76e036f872a57710d9aebdfad2730e1c0e78bc3805e0526fa4b04a9e3c1d13d` | Third-party/release reproduction YOLOX checkpoint; not bundled and not claimed as an official Megvii YOLOX checkpoint. |
 | `models/yolox_x_MOT17_ablation.pt` | `https://huggingface.co/Lekim89/yolox/resolve/main/yolox_x_MOT17_ablation.pt` | `26cb8d2808664e5068a4c812d53becbc948b47fd6eacf2b45db049ab40c48b1a` | Third-party/release reproduction YOLOX checkpoint; not bundled and not claimed as an official Megvii YOLOX checkpoint. |
+| `models/yolox_x_MOT17_test.pt` | `https://huggingface.co/Lekim89/yolox/resolve/main/yolox_x_MOT17_test.pt` | `e3945f3523fde1e107708aacd64dab0670c34e371d136e54587cac7a50d3cfba` | Test-split checkpoint used to build the recorded MOT17 submission; not bundled. |
 | `models/yolox_x_MOT20_ablation.pt` | `https://huggingface.co/Lekim89/yolox/resolve/main/yolox_x_MOT20_ablation.pt` | `c8a49d9a58ab6dbc59e2f5daebb552513f6f5474acd9f62b47b4ef738e4900a3` | Third-party/release reproduction YOLOX checkpoint; not bundled and not claimed as an official Megvii YOLOX checkpoint. |
+| `models/yolox_x_MOT20_test.pt` | `https://huggingface.co/Lekim89/yolox/resolve/main/yolox_x_MOT20_test.pt` | `021d7bc47fe20ae690007454cd2192df6237c2f4446ae92737a79523de89de64` | Test-split checkpoint used to build the recorded MOT20 submission; not bundled. |
 
 If these URLs are not the final stable hosting location, publish the weights to
 a controlled Hugging Face repository, GitHub Release, or Zenodo record and update
@@ -110,6 +123,20 @@ boxmot eval --benchmark mot17 --split ablation --tracker reekfsort --tracker-bac
 boxmot generate --benchmark mot20 --split ablation --detector yolox_x_mot20_ablation
 boxmot eval --benchmark mot20 --split ablation --tracker reekfsort --tracker-backend python --project runs/reekfsort_reproduce --name mot20_ablation --exist-ok
 ```
+
+Set `BOXMOT_NO_REID=1` for the motion-only paper configuration. For no-GT test
+submission generation, make the split-specific detector explicit so an
+ablation checkpoint cannot be selected accidentally:
+
+```bash
+BOXMOT_NO_REID=1 python -m boxmot.engine.cli eval --benchmark dancetrack --split test --detector models/yolox_x_dancetrack.pt --tracker reekfsort --tracker-backend python --device 0 --project runs --name dancetrack_test --exist-ok --imgsz 800,1440 --batch-size 1 --no-auto-batch
+BOXMOT_NO_REID=1 python -m boxmot.engine.cli eval --benchmark mot17 --split test --detector models/yolox_x_MOT17_test.pt --tracker reekfsort --tracker-backend python --device 0 --project runs --name mot17_test --exist-ok --imgsz 800,1440 --batch-size 1 --no-auto-batch
+BOXMOT_NO_REID=1 python -m boxmot.engine.cli eval --benchmark mot20 --split test --detector models/yolox_x_MOT20_test.pt --tracker reekfsort --tracker-backend python --device 0 --project runs --name mot20_test --exist-ok --imgsz 800,1440 --batch-size 1 --no-auto-batch
+```
+
+These commands package MOTChallenge 10-column text files but do not calculate
+official test metrics. Upload each generated archive to its corresponding
+benchmark server and record the submission identifier and result-page URL.
 
 For MOT17 public detections:
 
@@ -139,6 +166,24 @@ python scripts/reproduce/reekfsort_ablation.py --benchmark mot20 --split ablatio
 The angle-cost branch is retained for controlled ablation, but it is not enabled in the final paper configuration. The final `Ours` setting uses virtual observation plus confidence cost and disables angle cost because the with-angle/full candidate did not provide the final default tradeoff across the evaluated benchmarks.
 
 ## Results
+
+The repository publishes compact, reviewable summaries in
+[`results/paper`](results/paper/README.md). Full run directories, detector
+caches, datasets, weights, and test-submission archives remain excluded.
+
+| Benchmark | Comparison | HOTA | MOTA | IDF1 | IDSW | Interpretation |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| DanceTrack val | revised backbone | 51.098 | 88.823 | 50.399 | 2011 | controlled ablation reference |
+| DanceTrack val | final no-angle configuration | 55.206 | 89.428 | 55.086 | 1556 | improves association over the revised backbone |
+| MOT17 ablation | OC-SORT | 66.441 | 74.550 | 77.901 | 229 | external tracker baseline |
+| MOT17 ablation | final no-angle configuration | 66.418 | 75.103 | 77.745 | 168 | similar HOTA with 61 fewer identity switches |
+| MOT20 ablation | OC-SORT | 72.253 | 87.406 | 86.948 | 660 | dense-scene baseline |
+| MOT20 ablation | final no-angle configuration | 71.009 | 87.358 | 85.149 | 839 | negative result; dense-scene limitation |
+
+MOT20 is reported as a limitation rather than a positive result: the final
+configuration lowers HOTA and IDF1 and increases identity switches relative to
+OC-SORT. Timing values in the detailed CSV are tracker-only measurements with
+detections loaded from cache, not end-to-end detector-plus-tracker speed.
 
 Evaluation and ablation outputs are written under `runs/` by default:
 

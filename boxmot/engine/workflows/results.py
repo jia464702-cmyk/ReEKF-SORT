@@ -161,6 +161,8 @@ class ValidationResult:
         include_sequences: bool = True,
         include_timings: bool = False,
     ) -> str:
+        if self.summary_label == "submission":
+            return self._submission_report()
         return reporting.render_validation_cli_report(
             self.raw,
             args=self.args,
@@ -179,6 +181,8 @@ class ValidationResult:
         compare_raw: dict[str, Any] | None = None,
         compare_args: Any = None,
     ) -> RenderableType:
+        if self.summary_label == "submission":
+            return Text(self._submission_report(), style=STYLE_TEXT_STRONG)
         return reporting.build_validation_cli_renderable(
             self.raw,
             args=self.args,
@@ -191,6 +195,8 @@ class ValidationResult:
         )
 
     def format_report(self, *, title: str | None = None, include_sequences: bool = True) -> str:
+        if self.summary_label == "submission":
+            return self._submission_report()
         report_title = reporting.DEFAULT_VALIDATION_REPORT_TITLE if title is None else title
         return reporting.format_validation_report(
             self.raw,
@@ -206,6 +212,9 @@ class ValidationResult:
         include_sequences: bool = True,
         include_timings: bool = False,
     ) -> None:
+        if self.summary_label == "submission":
+            print(self._submission_report())
+            return
         reporting.print_validation_cli_report(
             self.raw,
             args=self.args,
@@ -213,6 +222,16 @@ class ValidationResult:
             title=reporting.CLI_RESULTS_SUMMARY_TITLE if title is None else title,
             include_sequences=include_sequences,
             include_timings=include_timings,
+        )
+
+    def _submission_report(self) -> str:
+        return (
+            "SUBMISSION READY\n"
+            f"Sequences: {self.summary.get('sequence_count', 0)}\n"
+            f"Rows: {self.summary.get('total_rows', 0)}\n"
+            f"Format: {self.summary.get('format', '')}\n"
+            f"Archive: {self.summary.get('archive', '')}\n"
+            f"SHA256: {self.summary.get('archive_sha256', '')}"
         )
 
     def to_dict(self, *, include_raw: bool = False) -> dict[str, Any]:

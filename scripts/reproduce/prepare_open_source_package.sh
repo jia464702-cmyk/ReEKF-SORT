@@ -36,6 +36,7 @@ tar \
   --exclude="./assets/reid-mini" \
   --exclude="./.git" \
   --exclude="./.venv" \
+  --exclude="./.venv-*" \
   --exclude="./.pytest_cache" \
   --exclude="./.ruff_cache" \
   --exclude="./.mypy_cache" \
@@ -62,6 +63,9 @@ tar \
   --exclude="*.tmp" \
   --exclude="*.part" \
   --exclude="*.bak" \
+  --exclude="*.before_*" \
+  --exclude="*.failed_duplicate" \
+  --exclude="README_*PATCH*.md" \
   --exclude="*.swp" \
   --exclude="*~" \
   -cf - \
@@ -96,7 +100,7 @@ PY
 
 tar \
   --sort=name \
-  --mtime="UTC 2026-06-17" \
+  --mtime="UTC 2026-09-12" \
   --owner=0 \
   --group=0 \
   --numeric-owner \
