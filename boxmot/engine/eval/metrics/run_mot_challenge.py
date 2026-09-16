@@ -45,7 +45,7 @@ current_dir = Path(__file__).resolve().parent
 repo_root = current_dir.parents[3]
 # Vendored TrackEval repo lives at boxmot/engine/eval/trackeval/trackeval,
 # and the importable package is under that repo root as ./trackeval.
-trackeval_dir = current_dir.parent / "trackeval" / "trackeval"
+trackeval_dir = current_dir.parents[1] / "trackeval"
 
 sys.path.insert(0, str(repo_root))
 # Add trackeval to sys.path
