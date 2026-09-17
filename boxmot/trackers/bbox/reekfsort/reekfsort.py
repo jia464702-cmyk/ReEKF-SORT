@@ -489,14 +489,15 @@ def associate_reekf(
     )
 
     angle_cost = np.zeros_like(iou_cost)
-    for det_idx, det in enumerate(detections):
-        det_u, det_v = _bbox_center(det)
-        for trk_idx, trk in enumerate(tracks):
-            ref_u, ref_v = _bbox_center(trk.last_observation)
-            det_angle = np.arctan2(det_v - ref_v, det_u - ref_u)
-            angle_cost[det_idx, trk_idx] = 1.0 - np.cos(
-                _wrap_angle(det_angle - trk.predicted_angle)
-            )
+    if lambda_angle != 0.0:
+        for det_idx, det in enumerate(detections):
+            det_u, det_v = _bbox_center(det)
+            for trk_idx, trk in enumerate(tracks):
+                ref_u, ref_v = _bbox_center(trk.last_observation)
+                det_angle = np.arctan2(det_v - ref_v, det_u - ref_u)
+                angle_cost[det_idx, trk_idx] = 1.0 - np.cos(
+                    _wrap_angle(det_angle - trk.predicted_angle)
+                )
 
     direction_reward = np.zeros_like(iou_cost)
     if (

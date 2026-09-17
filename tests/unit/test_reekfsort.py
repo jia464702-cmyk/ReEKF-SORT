@@ -7,6 +7,7 @@ import yaml
 from boxmot.trackers.bbox.reekfsort.reekfsort import (
     _k_previous_observation,
     _speed_direction,
+    associate_reekf,
     confidence_continuity_cost,
     rematch_last_observations,
 )
@@ -69,6 +70,38 @@ def test_paper_final_configuration_is_frozen():
     }
     actual = {key: config[key]["default"] for key in expected}
     assert actual == expected
+
+
+def test_disabled_angle_cost_skips_angle_computation():
+    class Track:
+        predicted_confidence = 0.8
+
+        @property
+        def last_observation(self):
+            raise AssertionError(
+                "angle state should not be read when lambda_angle is zero"
+            )
+
+        @property
+        def predicted_angle(self):
+            raise AssertionError(
+                "angle state should not be read when lambda_angle is zero"
+            )
+
+    matches, unmatched_dets, unmatched_trks = associate_reekf(
+        detections=np.array([[0.0, 0.0, 2.0, 2.0, 0.9]]),
+        trackers=np.array([[0.0, 0.0, 2.0, 2.0]]),
+        tracks=[Track()],
+        asso_func=lambda dets, trks: np.array([[0.9]]),
+        iou_threshold=0.3,
+        lambda_conf=1.2,
+        lambda_angle=0.0,
+        eps=1e-6,
+    )
+
+    np.testing.assert_array_equal(matches, [[0, 0]])
+    assert unmatched_dets.size == 0
+    assert unmatched_trks.size == 0
 
 
 def test_observation_centric_helpers_use_requested_history_window():
