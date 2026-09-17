@@ -1,17 +1,23 @@
-# Paper result records
+# Historical paper result records (superseded)
 
-This directory contains lightweight, auditable summaries derived from the
-frozen paper records. It intentionally excludes datasets, detector weights,
-detection caches, full run directories, and challenge submission archives.
+> **Do not cite this directory as the final paper record.** These files preserve
+> results from an earlier DanceTrack configuration and may differ from the
+> frozen paper configuration. The authoritative public summaries are maintained
+> in [`../../paper_results/`](../../paper_results/).
+
+This directory contains a historical snapshot retained for auditability. It
+intentionally excludes datasets, detector weights, detection caches, full run
+directories, and challenge submission archives.
 
 ## Files
 
-- `ablation_summary.csv` records validation/ablation metrics used in the paper.
+- `ablation_summary.csv` records an earlier validation/ablation sweep and is
+  not the authoritative final paper table.
 - `test_submission_artifacts.csv` records the verified shape and checksum of
   each test submission. Official server metrics are still pending and must not
   be inferred from these files.
 
-## Frozen final configuration
+## Configuration recorded by this historical snapshot
 
 ```yaml
 confidence_cost_mode: absolute
@@ -24,14 +30,17 @@ use_angle_cost: false
 lambda_angle: 0.0
 ```
 
-The `final_no_angle` rows use this configuration. The with-angle variant is an
-ablation only. Reported FPS is association/update throughput with detections
-loaded from cache; it is not end-to-end detector-plus-tracker throughput.
+Rows named `final_no_angle` were labelled as final when this snapshot was
+created. They must not be mixed with later frozen results without matching the
+configuration manifest and detector-cache provenance. The with-angle variant
+is an ablation only. Reported FPS is association/update throughput with
+detections loaded from cache; it is not end-to-end detector-plus-tracker
+throughput.
 
 ## Interpretation boundary
 
-- DanceTrack validation supports the confidence-continuity contribution, but
-  the confidence-only row has slightly higher HOTA than the combined final row.
+- This snapshot's DanceTrack confidence-only row has slightly higher HOTA than
+  its combined row; this statement applies only to the historical sweep here.
 - MOT17 shows a substantial identity-switch reduction relative to OC-SORT while
   HOTA remains effectively unchanged.
 - MOT20 is a negative result for the final configuration relative to OC-SORT and

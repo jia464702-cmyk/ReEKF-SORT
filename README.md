@@ -1,8 +1,8 @@
 # ReEKF-SORT
 
-**Online multi-object occlusion tracking based on causal motion prediction and confidence-continuity association**
+**Online Multi-Object Tracking with Causal Pseudo-Observation Regularization and Confidence-Continuity Association**
 
-ReEKF-SORT is a motion-only, online multi-object tracker designed for pedestrian tracking under occlusion and non-linear motion. It follows the tracking-by-detection paradigm and extends a SORT/OC-SORT-style pipeline with:
+ReEKF-SORT is a motion-only, online multi-object tracker designed for pedestrian tracking under occlusion and ambiguous motion-only association. It follows the tracking-by-detection paradigm and extends a SORT/OC-SORT-style pipeline with:
 
 - a speed-angle extended Kalman filter (EKF) motion state;
 - causal pseudo-observations generated only from pre-occlusion history;
@@ -11,7 +11,7 @@ ReEKF-SORT is a motion-only, online multi-object tracker designed for pedestrian
 
 This repository contains source code, tracker configurations, tests, documentation, and reproduction scripts. Datasets, detector checkpoints, detection caches, generated submissions, and large experiment outputs are intentionally excluded.
 
-> **Paper status:** manuscript submitted to *The Visual Computer*. Official test-server metrics should be treated as pending until the corresponding submission IDs and result pages are archived.
+> **Paper status:** manuscript in preparation for journal submission. Official test-server metrics should be treated as pending until the corresponding submission IDs and result pages are archived.
 
 ## Highlights
 
@@ -203,7 +203,7 @@ On MOT17, ReEKF-SORT reduces identity switches from 229 to 168: 61 fewer switche
 
 MOT20 is a negative result. In the dense MOT20 ablation split, ReEKF-SORT decreases HOTA and IDF1, increases identity switches, and is substantially slower. This suggests that repeated pseudo-observation updates and the current Python association implementation are not yet suitable for the most crowded scenes.
 
-Small paper-result records should be stored under `paper_results/`. Large caches, datasets, weights, raw runs, and submission archives must remain outside Git.
+Small authoritative paper-result records are stored under `paper_results/`. The older `results/paper/` directory is retained only as a historical snapshot and must not be cited as the final configuration. Large caches, datasets, weights, raw runs, and submission archives must remain outside Git.
 
 ## Official test submissions
 
@@ -290,16 +290,15 @@ This repository follows the upstream BoxMOT **AGPL-3.0** license. Vendored third
 
 ## Citation
 
-The manuscript is not yet formally published. Do not invent a DOI or final bibliographic record. Until an accepted version is available, cite the software repository and the submitted manuscript metadata in [`CITATION.cff`](CITATION.cff).
+The manuscript is not yet formally published. Do not invent a DOI or final bibliographic record. Until an accepted version is available, cite the software repository and the current manuscript metadata in [`CITATION.cff`](CITATION.cff).
 
 ```bibtex
 @software{reekfsort2026,
-  title  = {ReEKF-SORT: Online Multi-Object Occlusion Tracking Based on Causal Motion Prediction and Confidence-Continuity Association},
+  title  = {ReEKF-SORT: Online Multi-Object Tracking with Causal Pseudo-Observation Regularization and Confidence-Continuity Association},
   author = {Ma, Jianhong and Liu, Jia and Jin, Yan and Chen, Yongxia},
   year   = {2026},
   url    = {https://github.com/jia464702-cmyk/ReEKF-SORT}
 }
 ```
 
-Before a paper-final release, confirm the author order, affiliations, year, manuscript status, and any DOI or preprint URL against the submitted paper.
-
+Before a paper-final release, confirm the author order, affiliations, year, manuscript status, and any DOI or preprint URL against the current manuscript.
