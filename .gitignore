@@ -30,8 +30,8 @@ weights/*_openvino_model
 weights/*.engine
 weights/*.tflite
 
-# evaluation tools folder
-boxmot/engine/eval/trackeval/
+# downloaded TrackEval benchmark data (vendored TrackEval source remains tracked)
+boxmot/engine/eval/trackeval/data/
 
 # zip files
 *.zip
@@ -40,7 +40,6 @@ boxmot/engine/eval/trackeval/
 *_openvino_model
 *.torchscript
 *.pt
-*.pth
 *.pth
 *.onnx
 *.engine
