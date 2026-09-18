@@ -199,6 +199,11 @@ The following values were obtained with the same cached YOLOX detections for eac
 | MOT20 ablation | OC-SORT | 72.253 | 87.406 | 86.948 | 71.292 | 73.413 | 660 | 44.1 |
 | MOT20 ablation | ReEKF-SORT | 71.009 | 87.358 | 85.149 | 69.037 | 73.244 | 839 | 9.5 |
 
+The tracker-FPS values above were measured before the disabled-angle fast path
+introduced in version 0.1.1. That optimization does not change the reported
+accuracy metrics, but current-code speed must be remeasured before citing an
+updated runtime result.
+
 On MOT17, ReEKF-SORT reduces identity switches from 229 to 168: 61 fewer switches, or 26.6%. Aggregate HOTA and IDF1 remain approximately level and should not be described as large improvements.
 
 MOT20 is a negative result. In the dense MOT20 ablation split, ReEKF-SORT decreases HOTA and IDF1, increases identity switches, and is substantially slower. This suggests that repeated pseudo-observation updates and the current Python association implementation are not yet suitable for the most crowded scenes.
